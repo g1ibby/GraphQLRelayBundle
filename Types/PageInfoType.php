@@ -29,10 +29,9 @@ class PageInfoType extends GraphQLType
                 'type' => Type::nonNull(Type::boolean()),
                 'description' => 'When paginating forwards, are there more items?',
                 'resolve' => function ($collection, $test) {
-                    if ($collection instanceof LengthAwarePaginator) {
-                        return $collection->hasMorePages();
+                    if ($collection['total'] - ($collection['first'] * $collection['currentPage']) > 0) {
+                        return true;
                     }
-
                     return false;
                 }
             ],
@@ -40,10 +39,9 @@ class PageInfoType extends GraphQLType
                 'type' => Type::nonNull(Type::boolean()),
                 'description' => 'When paginating backwards, are there more items?',
                 'resolve' => function ($collection) {
-                    if ($collection instanceof LengthAwarePaginator) {
-                        return $collection->currentPage() > 1;
+                    if ($collection['currentPage'] > 1) {
+                        return true;
                     }
-
                     return false;
                 }
             ]

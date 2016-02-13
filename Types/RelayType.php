@@ -22,7 +22,7 @@ abstract class RelayType extends GraphQLType
      */
     public function fields()
     {
-        return array_merge($this->relayFields(), [
+        return array_merge($this->relayFields(), $this->getConnections(), [
             'id' => [
                 'type' => Type::nonNull(Type::id()),
                 'description' => 'ID of type.',
@@ -41,7 +41,7 @@ abstract class RelayType extends GraphQLType
      */
     public function getIdentifier($obj)
     {
-        return $obj->id;
+        return $obj['id'];
     }
 
     /**
@@ -84,37 +84,32 @@ abstract class RelayType extends GraphQLType
                     ]
                 ],
                 'resolve' => isset($edge['resolve']) ? $edge['resolve'] : function ($collection, array $args, ResolveInfo $info) use ($name) {
+                    $items = [];
 
-                    return $collection;
-//                    $items = [];
-//
-//                    if ($collection instanceof Model) {
-//                        $items = $collection->getAttribute($name);
-//                    } else if (is_object($collection) && method_exists($collection, 'get')) {
-//                        $items = $collection->get($name);
-//                    } else if (is_array($collection) && isset($collection[$name])) {
-//                        $items = new Collection($collection[$name]);
-//                    }
-//
-//                    if (isset($args['first'])) {
-//                        $total = $items->count();
-//                        $first = $args['first'];
-//                        $after = $this->decodeCursor($args);
-//                        $currentPage = $first && $after ? floor(($first + $after) / $first) : 1;
-//
-//                        return new Paginator(
-//                            $items->slice($after)->take($first),
-//                            $total,
-//                            $first,
-//                            $currentPage
-//                        );
-//                    }
-//
-//                    return new Paginator(
-//                        $items,
-//                        count($items),
-//                        count($items)
-//                    );
+                    if (is_array($collection) && isset($collection[$name])) {
+                        $items = $collection[$name];
+                    }
+
+                    if (isset($args['first'])) {
+                        $total = count($items);
+                        $first = $args['first'];
+                        $after = $this->decodeCursor($args);
+                        $currentPage = $first && $after ? floor(($first + $after) / $first) : 1;
+
+                        return [
+                            'items' => array_slice($items, $after, $first),
+                            'total' => $total,
+                            'first' => $first,
+                            'currentPage' => $currentPage
+                        ];
+                    }
+
+                    return [
+                        'items' => $items,
+                        'total' => count($items),
+                        'first' => count($items),
+                        'currentPage' => 1
+                    ];
                 }
             ];
         }
@@ -218,23 +213,17 @@ abstract class RelayType extends GraphQLType
     protected function injectCursor($collection)
     {
         if ($collection) {
-            $page = $collection->currentPage();
+            $page = $collection['currentPage'];
 
-            foreach ($collection as $x => &$item) {
+            foreach ($collection['items'] as $x => &$item) {
                 $cursor = ($x + 1) * $page;
                 $encodedCursor = $this->encodeGlobalId('arrayconnection', $cursor);
 
-                if (is_array($item)) {
-                    $item['relayCursor'] = $encodedCursor;
-                } else if (is_object($item) && is_array($item->attributes)) {
-                    $item->attributes['relayCursor'] = $encodedCursor;
-                } else {
-                    $item->relayCursor = $encodedCursor;
-                }
+                $item['relayCursor'] = $encodedCursor;
             }
         }
 
-        return $collection;
+        return $collection['items'];
     }
 
     /**
@@ -245,13 +234,7 @@ abstract class RelayType extends GraphQLType
      */
     protected function resolveCursor($edge)
     {
-        if (is_array($edge) && isset($edge['relayCursor'])) {
-            return $edge['relayCursor'];
-        } elseif (is_array($edge->attributes)) {
-            return $edge->attributes['relayCursor'];
-        }
-
-        return $edge->relayCursor;
+        return $edge['relayCursor'];
     }
 
     /**
